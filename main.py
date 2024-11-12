@@ -1,8 +1,8 @@
+# pip install librus-apix
 from credentials import *
 from librus_apix.client import new_client, Client, Token
 from datetime import datetime
 from librus_apix.timetable import get_timetable
-
 
 def main():
     client: Client = new_client()
