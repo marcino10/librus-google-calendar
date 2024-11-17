@@ -7,7 +7,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 
-def get_time_blocks():
+def get_librus_client():
     client: Client = new_client()
 
     # Now we update the token with client.get_token(u, p)
@@ -23,26 +23,59 @@ def get_time_blocks():
     # The token can then be just passed into new_client function
     client = new_client(token=token)
 
-    today = datetime.now().date()
-    monday_date = str(today - timedelta(days=today.weekday()))
-    monday_date = datetime.strptime(monday_date, '%Y-%m-%d')
-    timetable = get_timetable(client, monday_date)
-    # print(timetable[1])
+    return client
+
+
+def change_time_by_minutes(time, minutes, operation='addition'):
+    time_format = '%H:%M'
+    if operation == 'addition':
+        time = datetime.strptime(time, time_format)
+        time += timedelta(minutes=minutes)
+    elif operation == 'subtraction':
+        time = datetime.strptime(time, time_format)
+        time -= timedelta(minutes=minutes)
+    else:
+        raise ValueError('Invalid operation')
+    return datetime.strftime(time, '%H:%M')
+
+
+def get_time_blocks(exc_patterns, num_of_weeks=3):
+    client = get_librus_client()
+
+    today = datetime.now()
+    monday_dates = []
+    for i in range(0, num_of_weeks):
+        day = today + timedelta(weeks=i)
+        monday_dates.append(day - timedelta(days=day.weekday()))
+    timetables = [get_timetable(client, date) for date in monday_dates]
 
     time_blocks = {}
-    for weekday in timetable:
-        start_time = None
-        end_time = None
-        has_start = False
-        for lesson in range(0, len(weekday)):
-            if weekday[lesson].subject != '':
+    day_count = 1
+    for timetable in timetables:
+        for weekday in timetable:
+            if datetime.strptime(weekday[0].date, '%Y-%m-%d').date() < today.date():
+                continue
+            has_start = False
+
+            exc_subjects = []
+            if day_count in exc_patterns.keys():
+                for subject in exc_patterns[day_count]:
+                    exc_subjects.append(subject)
+
+            for lesson in range(0, len(weekday)):
                 if not has_start:
-                    start_time = weekday[lesson].date_from
-                    has_start = True
-            if weekday[lesson].subject == '' and has_start:
-                end_time = weekday[lesson - 1].date_to
-                time_blocks[weekday[0].date] = [start_time, end_time]
-                break
+                    if weekday[lesson].subject != '' and weekday[lesson].subject not in exc_subjects:
+                        start_time = weekday[lesson].date_from
+                        start_time = change_time_by_minutes(start_time, 20, 'subtraction')
+                        has_start = True
+                elif weekday[lesson].subject == '' or weekday[lesson].subject in exc_subjects:
+                    end_time = weekday[lesson - 1].date_to
+                    end_time = change_time_by_minutes(end_time, 20, 'addition')
+                    time_blocks[weekday[0].date] = [start_time, end_time]
+                    break
+
+            day_count += 1
+
     return time_blocks
 
 
@@ -80,18 +113,7 @@ def get_calendar_id(service, calendar_name):
             return calendar['id']
 
 
-def set_events(time_blocks, service):
-    # for testing
-    temp_time_blocks = time_blocks.copy()
-    for day, times in time_blocks.items():
-        if day == '2024-11-12':
-            continue
-        else:
-            temp_time_blocks.pop(day)
-    time_blocks = temp_time_blocks
-    print (time_blocks)
-    #
-
+def set_events(service, time_blocks, calendar_id='primary'):
     for day, times in time_blocks.items():
         event = {
             'summary': 'School',
@@ -105,18 +127,23 @@ def set_events(time_blocks, service):
             }
         }
 
-        event = service.events().insert(calendarId='Work', body=event).execute()
+        event = service.events().insert(calendarId=calendar_id, body=event).execute()
         print('Event created: %s' % (event.get('htmlLink')))
 
 
 def main():
     creds = google_authorize.main()
-    time_blocks = get_time_blocks()
+    # key is a weekday - it starts from 1 for Monday and ends at 7 for Sunday
+    # for all days set key to 0
+    exc_patterns = {
+        2: ['Godz. do dyspozycji dyrektora']
+    }
+    time_blocks = get_time_blocks(exc_patterns, 3)
     service = set_service(creds)
-    print(get_calendar_names(service))
-    calendar_id = get_calendar_id(service,'Work')
-    print(calendar_id)
-    # set_events(time_blocks, service)
+    # print(get_calendar_names(service))
+    calendar_id = get_calendar_id(service, 'Work')
+    print(time_blocks)
+    # set_events(service, time_blocks, calendar_id)
 
 
 if __name__ == "__main__":
