@@ -5,7 +5,7 @@ from librus_apix.timetable import get_timetable
 import google_authorize
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-
+import json
 
 def get_librus_client():
     client: Client = new_client()
@@ -50,17 +50,14 @@ def get_time_blocks(exc_patterns, num_of_weeks=3):
     timetables = [get_timetable(client, date) for date in monday_dates]
 
     time_blocks = {}
-    day_count = 1
     for timetable in timetables:
+        day_count = 1
         for weekday in timetable:
             if datetime.strptime(weekday[0].date, '%Y-%m-%d').date() < today.date():
                 continue
             has_start = False
 
-            exc_subjects = []
-            if day_count in exc_patterns.keys():
-                for subject in exc_patterns[day_count]:
-                    exc_subjects.append(subject)
+            exc_subjects = [subject for subject in (exc_patterns[day_count]+exc_patterns[0])]
 
             for lesson in range(0, len(weekday)):
                 if not has_start:
@@ -101,6 +98,15 @@ def get_calendar_list(service):
     return calendar_entry_list
 
 
+def get_event_list(service, calendar_id):
+    events = service.events().list(
+        calendarId=calendar_id,
+        timeMin=f"{datetime.now().date()}T00:00:00Z",
+        q='school'
+    ).execute()
+    return events
+
+
 def get_calendar_names(service):
     calendar_list = get_calendar_list(service)
     return [calendar['summary'] for calendar in calendar_list]
@@ -131,18 +137,50 @@ def set_events(service, time_blocks, calendar_id='primary'):
         print('Event created: %s' % (event.get('htmlLink')))
 
 
+def delete_past_events_from_json():
+    with open('events.json', 'r') as json_file:
+        events = json.load(json_file)
+
+    print(events)
+
 def main():
     creds = google_authorize.main()
     # key is a weekday - it starts from 1 for Monday and ends at 7 for Sunday
     # for all days set key to 0
     exc_patterns = {
-        2: ['Godz. do dyspozycji dyrektora']
+        0: ['Zajęcia z wychowawcą'],
+        1: [],
+        2: ['Godz. do dyspozycji dyrektora'],
+        3: [],
+        4: [],
+        5: [],
+        6: [],
+        7: []
     }
-    time_blocks = get_time_blocks(exc_patterns, 3)
+    # time_blocks = get_time_blocks(exc_patterns, 3)
     service = set_service(creds)
     # print(get_calendar_names(service))
     calendar_id = get_calendar_id(service, 'Work')
-    print(time_blocks)
+    # print(time_blocks)
+    # print(get_event_list(service, calendar_id))
+    events = get_event_list(service, calendar_id)['items']
+    # print(events)
+    for event in events:
+        # print(f"{event['summary']} : {datetime.strptime(event['start']['dateTime'], '%Y-%m-%dT%H:%M:%S%z').date()}")
+        print(f"{event['summary']} - {event['start']['dateTime']} - {event['end']['dateTime']}")
+    with open('events.json', 'w') as events_file:
+        event_id = 0
+        for event in events:
+            event_json = {
+                event_id: {
+                'summary': event['summary'],
+                'date': datetime.strftime(datetime.strptime(event['start']['dateTime'], '%Y-%m-%dT%H:%M:%S%z').date(), "%Y-%m-%d"),
+                'start': event['start']['dateTime'],
+                'end': event['end']['dateTime'],
+                }
+            }
+            json.dump(event_json, events_file, indent=4)
+    delete_past_events_from_json()
     # set_events(service, time_blocks, calendar_id)
 
 
