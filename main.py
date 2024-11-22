@@ -6,6 +6,8 @@ import google_authorize
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import json
+import re
+import os
 
 def get_librus_client():
     client: Client = new_client()
@@ -137,13 +139,54 @@ def set_events(service, time_blocks, calendar_id='primary'):
         print('Event created: %s' % (event.get('htmlLink')))
 
 
-def delete_past_events_from_json():
-    with open('events.json', 'r') as json_file:
-        events = json.load(json_file)
+def delete_past_events(events_list):
+    current_date = datetime.now().date()
 
-    print(events)
+    events_list = [event for event in events_list if datetime.strptime(event, '%Y-%m-%d').date() >= current_date]
+
+    return events_list
+
+
+def get_event_date(event):
+    return datetime.strftime(datetime.strptime(event['start']['dateTime'], '%Y-%m-%dT%H:%M:%S%z').date(), "%Y-%m-%d")
+
+
+def get_events_json(events):
+    events_json = {}
+    for event in events:
+        events_json[get_event_date(event)] = {
+            'summary': event['summary'],
+            'start': event['start']['dateTime'],
+            'end': event['end']['dateTime']
+        }
+    return events_json
+
+
+def get_changed_time_blocks(events, time_blocks):
+    pattern = r"(?<=T)\d{2}:\d{2}"
+    changed_time_blocks = {}
+    for event in time_blocks.keys():
+        if event in events.keys():
+            if re.search(pattern, events[event]['start']).group() != time_blocks[event][0]\
+                    or re.search(pattern, events[event]['end']).group() != time_blocks[event][1]:
+                changed_time_blocks[event] = time_blocks[event]
+        else:
+            changed_time_blocks[event] = time_blocks[event]
+
+    return changed_time_blocks
+
+
+def create_files():
+    if not os.path.exists('events.json'):
+        with open('events.json', 'w') as events_file:
+            json.dump({}, events_file, indent=4)
+    if not os.path.exists('del_events.json'):
+        with open('del_events.json', 'w') as del_events_file:
+            json.dump([], del_events_file, indent=4)
+
 
 def main():
+    create_files()
     creds = google_authorize.main()
     # key is a weekday - it starts from 1 for Monday and ends at 7 for Sunday
     # for all days set key to 0
@@ -157,31 +200,41 @@ def main():
         6: [],
         7: []
     }
-    # time_blocks = get_time_blocks(exc_patterns, 3)
+    time_blocks = get_time_blocks(exc_patterns, 3)
     service = set_service(creds)
-    # print(get_calendar_names(service))
     calendar_id = get_calendar_id(service, 'Work')
-    # print(time_blocks)
-    # print(get_event_list(service, calendar_id))
     events = get_event_list(service, calendar_id)['items']
-    # print(events)
-    for event in events:
-        # print(f"{event['summary']} : {datetime.strptime(event['start']['dateTime'], '%Y-%m-%dT%H:%M:%S%z').date()}")
-        print(f"{event['summary']} - {event['start']['dateTime']} - {event['end']['dateTime']}")
+    events_json = get_events_json(events)
+
+    with open('events.json', 'r') as events_file:
+        prev_events_json = json.load(events_file)
+
+    del_events = []
+    for event in prev_events_json.keys():
+        if event not in events_json.keys():
+            del_events.append(event)
+
+    with open('del_events.json', 'r') as del_events_file:
+        del_events_file = json.load(del_events_file)
+
+    del_events_file = delete_past_events(del_events_file)
+
+    del_events = del_events + del_events_file
+
+    for day in time_blocks.copy().keys():
+        if day in del_events:
+            del time_blocks[day]
+
+    time_blocks = get_changed_time_blocks(events_json, time_blocks)
+
+    set_events(service, time_blocks, calendar_id)
     with open('events.json', 'w') as events_file:
-        event_id = 0
-        for event in events:
-            event_json = {
-                event_id: {
-                'summary': event['summary'],
-                'date': datetime.strftime(datetime.strptime(event['start']['dateTime'], '%Y-%m-%dT%H:%M:%S%z').date(), "%Y-%m-%d"),
-                'start': event['start']['dateTime'],
-                'end': event['end']['dateTime'],
-                }
-            }
-            json.dump(event_json, events_file, indent=4)
-    delete_past_events_from_json()
-    # set_events(service, time_blocks, calendar_id)
+        json.dump(events_json, events_file, indent=4)
+    with open('del_events.json', 'w') as del_events_file:
+        json.dump(del_events, del_events_file, indent=4)
+
+    # print calendar names
+    # print(get_calendar_names(service))
 
 
 if __name__ == "__main__":
