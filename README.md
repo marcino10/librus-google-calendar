@@ -12,9 +12,9 @@
   // key is the number of the day of the week (0 - Monday, 1 - Tuesday, ..., 6 - Sunday).
   // 0 is for all days.
   "exc_patterns": {
-        "0": ["Zajęcia z wychowawcą"],
+        "0": ["Name of the subject"],
         "1": [],
-        "2": ["Godz. do dyspozycji dyrektora"],
+        "2": [],
         "3": [],
         "4": [],
         "5": [],
