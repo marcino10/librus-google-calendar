@@ -1,4 +1,3 @@
-from credentials_librus import *
 from librus_apix.client import new_client, Client, Token
 from datetime import datetime, timedelta
 from librus_apix.timetable import get_timetable
@@ -8,7 +7,7 @@ import re
 import os
 
 
-def get_librus_client():
+def get_librus_client(login, password):
     client: Client = new_client()
 
     # Now we update the token with client.get_token(u, p)
@@ -40,8 +39,8 @@ def change_time_by_minutes(time, minutes, operation='addition'):
     return datetime.strftime(time, '%H:%M')
 
 
-def get_time_blocks(exc_patterns, num_of_weeks=3):
-    client = get_librus_client()
+def get_time_blocks(exc_patterns, login, password, num_of_weeks=3):
+    client = get_librus_client(login, password)
 
     today = datetime.now()
     monday_dates = []
@@ -58,7 +57,7 @@ def get_time_blocks(exc_patterns, num_of_weeks=3):
                 continue
             has_start = False
 
-            exc_subjects = [subject for subject in (exc_patterns[day_count]+exc_patterns[0])]
+            exc_subjects = [subject for subject in (exc_patterns[str(day_count)]+exc_patterns["0"])]
 
             for lesson in range(0, len(weekday)):
                 if not has_start:
@@ -178,19 +177,14 @@ def create_files():
 def main():
     create_files()
     service = google_authorize.set_service()
-    # key is a weekday - it starts from 1 for Monday and ends at 7 for Sunday
-    # for all days set key to 0
-    exc_patterns = {
-        0: ['Zajęcia z wychowawcą'],
-        1: [],
-        2: ['Godz. do dyspozycji dyrektora'],
-        3: [],
-        4: [],
-        5: [],
-        6: [],
-        7: []
-    }
-    time_blocks = get_time_blocks(exc_patterns, 3)
+    with open('config.json', 'r') as config_file:
+        config = json.load(config_file)
+        exc_patterns = config['exc_patterns']
+        num_of_weeks = config['num_of_weeks']
+        login = config['librus_login']
+        password = config['librus_password']
+
+    time_blocks = get_time_blocks(exc_patterns, login, password, num_of_weeks)
     calendar_id = get_calendar_id(service, 'Work')
     events = get_event_list(service, calendar_id)['items']
     events_json = get_events_json(events)
