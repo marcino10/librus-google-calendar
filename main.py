@@ -3,11 +3,10 @@ from librus_apix.client import new_client, Client, Token
 from datetime import datetime, timedelta
 from librus_apix.timetable import get_timetable
 import google_authorize
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 import json
 import re
 import os
+
 
 def get_librus_client():
     client: Client = new_client()
@@ -76,15 +75,6 @@ def get_time_blocks(exc_patterns, num_of_weeks=3):
             day_count += 1
 
     return time_blocks
-
-
-def set_service(creds):
-    try:
-        service = build("calendar", "v3", credentials=creds)
-        return service
-    except HttpError as error:
-        print(f"An error occurred: {error}")
-        return None
 
 
 def get_calendar_list(service):
@@ -187,7 +177,7 @@ def create_files():
 
 def main():
     create_files()
-    creds = google_authorize.main()
+    service = google_authorize.set_service()
     # key is a weekday - it starts from 1 for Monday and ends at 7 for Sunday
     # for all days set key to 0
     exc_patterns = {
@@ -201,7 +191,6 @@ def main():
         7: []
     }
     time_blocks = get_time_blocks(exc_patterns, 3)
-    service = set_service(creds)
     calendar_id = get_calendar_id(service, 'Work')
     events = get_event_list(service, calendar_id)['items']
     events_json = get_events_json(events)
@@ -232,9 +221,6 @@ def main():
         json.dump(events_json, events_file, indent=4)
     with open('del_events.json', 'w') as del_events_file:
         json.dump(del_events, del_events_file, indent=4)
-
-    # print calendar names
-    # print(get_calendar_names(service))
 
 
 if __name__ == "__main__":
