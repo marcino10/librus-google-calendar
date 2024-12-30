@@ -179,7 +179,6 @@ def create_files():
 
 def exclude_user_changed_events(events, prev_events_json, time_blocks):
     new_time_blocks = time_blocks.copy()
-    print(new_time_blocks)
     for prev_event in prev_events_json.keys():
         if prev_event in events.keys():
             if prev_events_json[prev_event]['start'] != events[prev_event]['start'] or prev_events_json[prev_event]['end'] != events[prev_event]['end']:
@@ -225,11 +224,11 @@ def main():
 
     time_blocks = get_time_blocks_to_change(events_json, prev_events_json, time_blocks)
 
-    # set_events(service, time_blocks, calendar_id)
-    # with open('events.json', 'w') as events_file:
-    #     json.dump(events_json, events_file, indent=4)
-    # with open('del_events.json', 'w') as del_events_file:
-    #     json.dump(del_events, del_events_file, indent=4)
+    set_events(service, time_blocks, calendar_id)
+    with open('events.json', 'w') as events_file:
+        json.dump(events_json, events_file, indent=4)
+    with open('del_events.json', 'w') as del_events_file:
+        json.dump(del_events, del_events_file, indent=4)
 
 
 if __name__ == "__main__":
