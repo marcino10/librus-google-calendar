@@ -62,6 +62,8 @@ def get_time_blocks(exc_patterns, login, password, num_of_weeks=3):
             for lesson in range(0, len(weekday)):
                 if not has_start:
                     if weekday[lesson].subject != '' and weekday[lesson].subject not in exc_subjects:
+                        if 'dzień wolny szkoły' in weekday[lesson].info.keys():
+                            break
                         start_time = weekday[lesson].date_from
                         start_time = change_time_by_minutes(start_time, 20, 'subtraction')
                         has_start = True
@@ -151,9 +153,10 @@ def get_events_json(events):
     return events_json
 
 
-def get_changed_time_blocks(events, time_blocks):
+def get_time_blocks_to_change(events, prev_events_json, time_blocks):
     pattern = r"(?<=T)\d{2}:\d{2}"
     changed_time_blocks = {}
+    time_blocks = exclude_user_changed_events(events, prev_events_json, time_blocks)
     for event in time_blocks.keys():
         if event in events.keys():
             if re.search(pattern, events[event]['start']).group() != time_blocks[event][0]\
@@ -172,6 +175,18 @@ def create_files():
     if not os.path.exists('del_events.json'):
         with open('del_events.json', 'w') as del_events_file:
             json.dump([], del_events_file, indent=4)
+
+
+def exclude_user_changed_events(events, prev_events_json, time_blocks):
+    new_time_blocks = time_blocks.copy()
+    print(new_time_blocks)
+    for prev_event in prev_events_json.keys():
+        if prev_event in events.keys():
+            if prev_events_json[prev_event]['start'] != events[prev_event]['start'] or prev_events_json[prev_event]['end'] != events[prev_event]['end']:
+                if prev_event in new_time_blocks.keys():
+                    del new_time_blocks[prev_event]
+
+    return new_time_blocks
 
 
 def main():
@@ -208,13 +223,13 @@ def main():
         if day in del_events:
             del time_blocks[day]
 
-    time_blocks = get_changed_time_blocks(events_json, time_blocks)
+    time_blocks = get_time_blocks_to_change(events_json, prev_events_json, time_blocks)
 
-    set_events(service, time_blocks, calendar_id)
-    with open('events.json', 'w') as events_file:
-        json.dump(events_json, events_file, indent=4)
-    with open('del_events.json', 'w') as del_events_file:
-        json.dump(del_events, del_events_file, indent=4)
+    # set_events(service, time_blocks, calendar_id)
+    # with open('events.json', 'w') as events_file:
+    #     json.dump(events_json, events_file, indent=4)
+    # with open('del_events.json', 'w') as del_events_file:
+    #     json.dump(del_events, del_events_file, indent=4)
 
 
 if __name__ == "__main__":
